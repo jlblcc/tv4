@@ -16,6 +16,10 @@
 	"globals": {
 		"describe": true,
 		"it": true,
+		"before": true,
+		"beforeEach": true,
+		"after": true,
+		"afterEach": true,
 		"tv4": true,
 		"assert": true
 	}

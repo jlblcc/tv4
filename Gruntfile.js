@@ -103,8 +103,11 @@ module.exports = function (grunt) {
 	});
 
 	require('mocha-unfunk-reporter').option('style', 'ansi');
+
 	// main cli commands
 	grunt.registerTask('default', ['test']);
 	grunt.registerTask('build', ['clean', 'concat', 'jshint', 'uglify', 'copy']);
 	grunt.registerTask('test', ['build', 'mocha', 'mochaTest']);
+
+	grunt.registerTask('dev', ['clean', 'concat', 'jshint', 'mochaTest']);
 };
