@@ -57,23 +57,38 @@ ValidationError.prototype = {
 	}
 };
 
-function searchForTrustedSchemas(map, schema, url) {
+function isTrustedUrl(baseUrl, testUrl) {
+	if(testUrl.substring(0, baseUrl.length) == baseUrl){
+		var remainder = testUrl.substring(baseUrl.length);
+		if ((testUrl.length > 0 && testUrl.charAt(baseUrl.length - 1) == "/")
+			|| remainder.charAt(0) == "#"
+			|| remainder.charAt(0) == "?") {
+			return true;
+		}
+	}
+	return false;
+}
+
+function searchSchemas(map, schema, url) {
 	if (typeof schema.id == "string") {
-		if (schema.id.substring(0, url.length) == url) {
-			var remainder = schema.id.substring(url.length);
-			if ((url.length > 0 && url.charAt(url.length - 1) == "/")
-				|| remainder.charAt(0) == "#"
-				|| remainder.charAt(0) == "?") {
-				if (map[schema.id] == undefined) {
-					map[schema.id] = schema;
-				}
+		if (isTrustedUrl(url, schema.id)) {
+			if (map[schema.id] == undefined) {
+				map[schema.id] = schema;
 			}
 		}
 	}
 	if (typeof schema == "object") {
 		for (var key in schema) {
-			if (key != "enum" && typeof schema[key] == "object") {
-				searchForTrustedSchemas(map, schema[key], url);
+			if (key != "enum" ){
+				if (typeof schema[key] == "object") {
+					searchSchemas(map, schema[key], url);
+				}
+				else if (key === "$ref") {
+					var uri = getUriResource(schema[key]);
+					if (uri && typeof schema[uri] == "undefined") {
+						map[uri] = undefined;
+					}
+				}
 			}
 		}
 	}
@@ -82,7 +97,7 @@ function searchForTrustedSchemas(map, schema, url) {
 
 function createApi() {
 	var globalContext = new ValidatorContext();
-	return {
+	var api = {
 		freshApi: function () {
 			return createApi();
 		},
@@ -91,7 +106,7 @@ function createApi() {
 			if (typeof schema == "string") {
 				schema = {"$ref": schema};
 			}
-			var added = context.addSchema("", schema);
+			context.addSchema("", schema);
 			var error = context.validateAll(data, schema);
 			this.error = error;
 			this.missing = context.missing;
@@ -117,17 +132,38 @@ function createApi() {
 			return result;
 		},
 		addSchema: function (url, schema) {
-			return globalContext.addSchema(url, schema);
+			return globalContext.addSchema.apply(globalContext, arguments);
 		},
 		getSchema: function (url) {
-			return globalContext.getSchema(url);
+			return globalContext.getSchema.apply(globalContext, arguments);
 		},
+		getSchemaMap: function () {
+			return globalContext.getSchemaMap.apply(globalContext, arguments);
+		},
+		getSchemaUris: function () {
+			return globalContext.getSchemaUris.apply(globalContext, arguments);
+		},
+		getMissingUris: function () {
+			return globalContext.getMissingUris.apply(globalContext, arguments);
+		},
+		dropSchemas: function () {
+			globalContext.dropSchemas.apply(globalContext, arguments);
+		},
+        reset: function () {
+			globalContext.reset();
+			this.error = null;
+			this.missing = [];
+			this.valid = true;
+        },
 		missing: [],
 		error: null,
+		valid: true,
 		normSchema: normSchema,
 		resolveUrl: resolveUrl,
+		getUriResource: getUriResource,
 		errorCodes: ErrorCodes
 	};
+	return api;
 };
 
 global.tv4 = createApi();
