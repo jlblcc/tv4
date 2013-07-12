@@ -1,7 +1,7 @@
 describe("$ref 03", function () {
 
 	it("addSchema(), getSchema()", function () {
-		var url = "http://example.com/schema" + Math.random();
+		var url = "http://example.com/schema";
 		var schema = {
 			"test": "value"
 		};
@@ -12,7 +12,7 @@ describe("$ref 03", function () {
 	});
 
 	it("addSchema(), getSchema() with blank fragment", function () {
-		var url = "http://example.com/schema" + Math.random();
+		var url = "http://example.com/schema";
 		var schema = {
 			"test": "value"
 		};
@@ -23,7 +23,7 @@ describe("$ref 03", function () {
 	});
 
 	it("addSchema(), getSchema() with pointer path fragment", function () {
-		var url = "http://example.com/schema" + Math.random();
+		var url = "http://example.com/schema";
 		var schema = {
 			"items": {
 				"properties": {

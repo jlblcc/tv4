@@ -20,6 +20,7 @@
 		"beforeEach": true,
 		"after": true,
 		"afterEach": true,
+		"helper": true,
 		"tv4": true,
 		"assert": true
 	}
