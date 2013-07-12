@@ -86,6 +86,32 @@ assert.notOk = function (value, message) {
 
 //end of header.js
 
+describe("Core 01", function () {
+
+	it("getUriResource returns only location part of url", function () {
+
+		assert.strictEqual(tv4.getUriResource("http://example.com"), "http://example.com");
+
+		assert.strictEqual(tv4.getUriResource("http://example.com/main"), "http://example.com/main");
+		assert.strictEqual(tv4.getUriResource("http://example.com/main/"), "http://example.com/main");
+		assert.strictEqual(tv4.getUriResource("http://example.com/main//"), "http://example.com/main");
+
+		assert.strictEqual(tv4.getUriResource("http://example.com/main/sub"), "http://example.com/main/sub");
+		assert.strictEqual(tv4.getUriResource("http://example.com/main/sub/"), "http://example.com/main/sub");
+
+		assert.strictEqual(tv4.getUriResource("http://example.com/main#"), "http://example.com/main");
+		assert.strictEqual(tv4.getUriResource("http://example.com/main/sub/#"), "http://example.com/main/sub");
+
+		assert.strictEqual(tv4.getUriResource("http://example.com/main?"), "http://example.com/main?");
+		assert.strictEqual(tv4.getUriResource("http://example.com/main?q=1"), "http://example.com/main?q=1");
+		assert.strictEqual(tv4.getUriResource("http://example.com/main?q=1#abc"), "http://example.com/main?q=1");
+
+		assert.strictEqual(tv4.getUriResource("http://example.com/main/#"), "http://example.com/main");
+		assert.strictEqual(tv4.getUriResource("http://example.com/main/#?"), "http://example.com/main");
+		assert.strictEqual(tv4.getUriResource("http://example.com/main/#?q=a/b/c"), "http://example.com/main");
+	});
+});
+
 describe("Core 02", function () {
 
 	it("tv4.freshApi() produces working copy", function () {
@@ -108,6 +134,43 @@ describe("Core 02", function () {
 		assert.isUndefined(tv4.getSchema(schemaUrl1));
 		assert.isUndefined(duplicate.getSchema(schemaUrl2));
 		assert.isObject(tv4.getSchema(schemaUrl2));
+	});
+});
+
+describe("Core 03", function () {
+
+	it("tv4.dropSchemas() drops stored schemas", function () {
+		var schema = {
+			"items": {"$ref": "http://example.com/schema/items#"},
+			"maxItems": 2
+		};
+		tv4.addSchema("http://example.com/schema", schema);
+		assert.strictEqual(tv4.getSchema("http://example.com/schema"), schema, "has schema");
+
+		tv4.dropSchemas();
+		assert.isUndefined(tv4.getSchema("http://example.com/schema"), "doesn't have schema");
+	});
+
+	it("tv4.reset() clears errors, valid and missing", function () {
+		it("must be string, is integer", function () {
+			var data = 5;
+			var schema = {"type": "array", "items" : {"$ref" : "http://example.com"}};
+
+			assert.notOk(tv4.error, "starts with no error");
+			assert.isTrue(tv4.valid, "starts valid");
+			assert.length(tv4.missing, 0, "starts with 0 missing");
+
+			var valid = tv4.validate(data, schema);
+			assert.isFalse(valid);
+			assert.ok(tv4.error, "has error");
+			assert.isFalse(tv4.valid, "is invalid");
+			assert.length(tv4.missing, 1, "missing 1");
+
+			tv4.reset();
+			assert.notOk(tv4.error, "reset to no error");
+			assert.isTrue(tv4.valid, "reset to valid");
+			assert.length(tv4.missing, 0, "reset to 0 missing");
+		});
 	});
 });
 
@@ -1065,6 +1128,55 @@ describe("$ref 03", function () {
 		assert.strictEqual(fetched, "value");
 		//return fetched == "value";
 	});
+
+	it("addSchema(), getSchema() adds referred schemas", function () {
+		tv4 = tv4.freshApi();
+
+		var data = [123, true];
+		var valid;
+		var url = "http://example.com/schema";
+		var schema = {
+			"type": "array",
+			"items": {"$ref": "http://example.com/schema/sub#item"}
+		};
+		tv4.addSchema(url, schema);
+
+		//test missing
+		valid = tv4.validate(data, schema);
+		assert.isTrue(valid);
+		assert.length(tv4.missing, 1);
+		assert.isUndefined(tv4.getSchema('http://example.com/schema/sub'));
+
+		var item = {
+			"id": "#item",
+			"type": "boolean"
+		};
+		var sub = {
+			"id": "http://example.com/schema/sub",
+			"type": "object",
+			"lib": {
+				"item": item
+			}
+		};
+		tv4.addSchema(sub);
+
+		//added it?
+		assert.equal(tv4.getSchema(url), schema);
+		assert.equal(tv4.getSchema('http://example.com/schema/sub'), sub);
+		assert.equal(tv4.getSchema('http://example.com/schema/sub#item'), item);
+
+		//now use it
+		valid = tv4.validate(data, schema);
+		assert.length(tv4.missing, 0);
+		assert.isFalse(valid);
+
+		var error = { code: 0,
+			message: 'invalid data type: number',
+			dataPath: '/0',
+			schemaPath: '/items/type',
+			subErrors: null };
+		assert.deepEqual(tv4.error, error);
+	});
 });
 describe("$ref 04", function () {
 
@@ -1183,6 +1295,142 @@ describe("API 02", function () {
 	it("tv4.errorCodes exists", function () {
 		assert.isObject(tv4.errorCodes);
 		//return typeof tv4.errorCodes == "object";
+	});
+});
+
+describe("API 03", function () {
+
+	it("getSchemaUris() on clean tv4 returns an empty array", function () {
+		var list = tv4.getSchemaUris();
+		assert.isArray(list);
+		assert.length(list, 0);
+	});
+
+	it("getSchemaUris() returns newly added schema urls", function () {
+		tv4.addSchema("http://example.com/schema", {type: "object"});
+		var list = tv4.getSchemaUris();
+		assert.isArray(list);
+		assert.length(list, 1);
+		assert.strictEqual(list[0], "http://example.com/schema");
+	});
+
+	it("getMissingUris() returns only missing items", function () {
+		var schema = {
+			"items": {"$ref": "http://example.com/schema/item#"}
+		};
+		tv4.addSchema("http://example.com/schema/main", schema);
+
+		var item = {
+			"id": "http://example.com/schema/item",
+			"type": "boolean"
+		};
+
+		var list;
+		list = tv4.getSchemaUris();
+		assert.isArray(list);
+		assert.length(list, 2);
+		assert.includes(list, "http://example.com/schema/main", 'map has main uri');
+		assert.includes(list, "http://example.com/schema/item", 'map has item uri');
+
+		list = tv4.getMissingUris();
+		assert.isArray(list);
+		assert.length(list, 1);
+		assert.includes(list, "http://example.com/schema/item", 'map has item uri');
+
+		tv4.addSchema(item);
+
+		list = tv4.getMissingUris();
+		assert.isArray(list);
+		assert.length(list, 0);
+	});
+
+	it("getSchemaUris() optionally return filtered items", function () {
+		var schema = {
+			"items": {"$ref": "http://example.com/schema/item#"}
+		};
+		tv4.addSchema("http://example.com/schema/main", schema);
+
+		var list;
+		list = tv4.getSchemaUris(/schema\/main/);
+		assert.isArray(list);
+		assert.length(list, 1, 'list 1 main');
+		assert.includes(list, "http://example.com/schema/main");
+
+		list = tv4.getMissingUris(/^https?/);
+		assert.isArray(list);
+		assert.length(list, 1, 'list 1 item');
+		assert.includes(list, "http://example.com/schema/item");
+	});
+
+	it("getSchemaUris() returns unique uris without fragment", function () {
+		var schema = {
+			"properties": {
+				"alpha": {
+					"$ref": "http://example.com/schema/lib#alpha"
+				},
+				"beta": {
+					"$ref": "http://example.com/schema/lib#beta"
+				}
+			}
+		};
+		tv4.addSchema("http://example.com/schema/main", schema);
+		var sub = {
+			"id": "http://example.com/schema/item",
+			"items": {
+				"type": "boolean"
+			}
+		};
+		tv4.addSchema(sub);
+
+		var list;
+		list = tv4.getSchemaUris();
+		assert.isArray(list);
+		assert.length(list, 3);
+		assert.includes(list, "http://example.com/schema/main");
+		assert.includes(list, "http://example.com/schema/lib");
+		assert.includes(list, "http://example.com/schema/item");
+
+		list = tv4.getMissingUris();
+		assert.isArray(list);
+		assert.length(list, 1);
+		assert.includes(list, "http://example.com/schema/lib");
+	});
+
+
+	it("getSchemaMap() on clean tv4 returns an empty object", function () {
+		var map = tv4.getSchemaMap();
+		assert.isObject(map);
+		assert.isNotArray(map);
+		var list = Object.keys(map);
+		assert.length(list, 0);
+	});
+
+	it("getSchemaMap() returns an object mapping uris to schemas", function () {
+		var schema = {
+			"properties": {
+				"alpha": {
+					"$ref": "http://example.com/schema/lib#alpha"
+				},
+				"beta": {
+					"$ref": "http://example.com/schema/lib#beta"
+				}
+			}
+		};
+		tv4.addSchema("http://example.com/schema/main", schema);
+		var sub = {
+			"id": "http://example.com/schema/item",
+			"items": {
+				"type": "boolean"
+			}
+		};
+		tv4.addSchema(sub);
+
+		var map;
+		map = tv4.getSchemaMap();
+		assert.length(Object.keys(map), 3);
+		assert.ownPropertyVal(map, "http://example.com/schema/main", schema);
+		assert.ownPropertyVal(map, "http://example.com/schema/item", sub);
+		assert.ownPropertyVal(map, "http://example.com/schema/lib", undefined);
 	});
 });
 

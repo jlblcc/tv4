@@ -24,7 +24,7 @@ module.exports = function (grunt) {
 		},
 		clean: {
 			tests: ['tmp', 'test/all_concat.js'],
-			build: ['tv4.js', 'tv.min.js', '*js.map', 'test/all_concat.js', 'test/all_concat.js.map']
+			build: ['tv4.js', 'tv4.min.js', '*js.map', 'test/all_concat.js', 'test/all_concat.js.map']
 		},
 		jshint: {
 			//lint for mistakes

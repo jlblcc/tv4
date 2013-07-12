@@ -96,7 +96,7 @@ if (!Array.prototype.indexOf) {
 	}
 }
 
-var ValidatorContext = function (parent, collectMultiple) {
+var ValidatorContext = function ValidatorContext(parent, collectMultiple) {
 	this.missing = [];
 	this.schemas = parent ? Object.create(parent.schemas) : {};
 	this.collectMultiple = collectMultiple;
@@ -130,7 +130,7 @@ ValidatorContext.prototype.getSchema = function (url) {
 		fragment = url.substring(url.indexOf("#") + 1);
 		baseUrl = url.substring(0, url.indexOf("#"));
 	}
-	if (this.schemas[baseUrl] != undefined) {
+	if (typeof this.schemas[baseUrl] === 'object') {
 		var schema = this.schemas[baseUrl];
 		var pointerPath = decodeURIComponent(fragment);
 		if (pointerPath == "") {
@@ -158,23 +158,73 @@ ValidatorContext.prototype.getSchema = function (url) {
 };
 ValidatorContext.prototype.addSchema = function (url, schema) {
 	var map = {};
+	//overload
+	if (typeof schema === 'undefined') {
+		if (typeof url === 'object' && typeof url.id === 'string') {
+			schema = url;
+			url = schema.id;
+		}
+		else {
+			return map;
+		}
+	}
 	map[url] = schema;
 	normSchema(schema, url);
-	searchForTrustedSchemas(map, schema, url);
+	searchSchemas(map, schema, url);
 	for (var key in map) {
-		this.schemas[key] = map[key];
+		//dont overwrite with empty ref
+		if (!(typeof this.schemas[key] === 'object' && typeof map[key] === 'undefined')) {
+			this.schemas[key] = map[key];
+		}
 	}
 	return map;
 };
-	
-ValidatorContext.prototype.validateAll = function validateAll(data, schema, dataPathParts, schemaPathParts) {
+
+ValidatorContext.prototype.getSchemaMap = function () {
+	var map = {};
+	for (var key in this.schemas) {
+		map[key] = this.schemas[key];
+	}
+	return map;
+};
+
+ValidatorContext.prototype.getSchemaUris = function (filterRegExp) {
+	var list = [];
+	for (var key in this.schemas) {
+		if (!filterRegExp || filterRegExp.test(key)) {
+			list.push(key);
+		}
+	}
+	return list;
+};
+
+ValidatorContext.prototype.getMissingUris = function (filterRegExp) {
+	var list = [];
+	for (var key in this.schemas) {
+		if (typeof this.schemas[key] == 'undefined' && (!filterRegExp || filterRegExp.test(key))) {
+			list.push(key);
+		}
+	}
+	return list;
+};
+
+ValidatorContext.prototype.dropSchemas = function () {
+	this.schemas = {};
+	this.reset();
+};
+ValidatorContext.prototype.reset = function () {
+	this.missing = [];
+	this.errors = [];
+};
+
+ValidatorContext.prototype.validateAll = function (data, schema, dataPathParts, schemaPathParts) {
 	if (schema['$ref'] != undefined) {
 		schema = this.getSchema(schema['$ref']);
 		if (!schema) {
 			return null;
 		}
 	}
-	
+
 	var errorCount = this.errors.length;
 	var error = this.validateBasic(data, schema)
 		|| this.validateNumeric(data, schema)
@@ -193,7 +243,7 @@ ValidatorContext.prototype.validateAll = function validateAll(data, schema, data
 			this.prefixErrors(errorCount, dataPart, schemaPart);
 		}
 	}
-		
+
 	return this.handleError(error);
 }
 
@@ -697,6 +747,10 @@ function resolveUrl(base, href) {// RFC 3986
 		href.hash;
 }
 
+function getUriResource(uri) {
+	return uri.replace(/\/*(#[\s\S]*)?$/, '');
+}
+
 function normSchema(schema, baseUri) {
 	if (baseUri == undefined) {
 		baseUri = schema.id;
@@ -780,23 +834,38 @@ ValidationError.prototype = {
 	}
 };
 
-function searchForTrustedSchemas(map, schema, url) {
+function isTrustedUrl(baseUrl, testUrl) {
+	if(testUrl.substring(0, baseUrl.length) == baseUrl){
+		var remainder = testUrl.substring(baseUrl.length);
+		if ((testUrl.length > 0 && testUrl.charAt(baseUrl.length - 1) == "/")
+			|| remainder.charAt(0) == "#"
+			|| remainder.charAt(0) == "?") {
+			return true;
+		}
+	}
+	return false;
+}
+
+function searchSchemas(map, schema, url) {
 	if (typeof schema.id == "string") {
-		if (schema.id.substring(0, url.length) == url) {
-			var remainder = schema.id.substring(url.length);
-			if ((url.length > 0 && url.charAt(url.length - 1) == "/")
-				|| remainder.charAt(0) == "#"
-				|| remainder.charAt(0) == "?") {
-				if (map[schema.id] == undefined) {
-					map[schema.id] = schema;
-				}
+		if (isTrustedUrl(url, schema.id)) {
+			if (map[schema.id] == undefined) {
+				map[schema.id] = schema;
 			}
 		}
 	}
 	if (typeof schema == "object") {
 		for (var key in schema) {
-			if (key != "enum" && typeof schema[key] == "object") {
-				searchForTrustedSchemas(map, schema[key], url);
+			if (key != "enum" ){
+				if (typeof schema[key] == "object") {
+					searchSchemas(map, schema[key], url);
+				}
+				else if (key === "$ref") {
+					var uri = getUriResource(schema[key]);
+					if (uri && typeof schema[uri] == "undefined") {
+						map[uri] = undefined;
+					}
+				}
 			}
 		}
 	}
@@ -805,7 +874,7 @@ function searchForTrustedSchemas(map, schema, url) {
 
 function createApi() {
 	var globalContext = new ValidatorContext();
-	return {
+	var api = {
 		freshApi: function () {
 			return createApi();
 		},
@@ -814,7 +883,7 @@ function createApi() {
 			if (typeof schema == "string") {
 				schema = {"$ref": schema};
 			}
-			var added = context.addSchema("", schema);
+			context.addSchema("", schema);
 			var error = context.validateAll(data, schema);
 			this.error = error;
 			this.missing = context.missing;
@@ -840,17 +909,38 @@ function createApi() {
 			return result;
 		},
 		addSchema: function (url, schema) {
-			return globalContext.addSchema(url, schema);
+			return globalContext.addSchema.apply(globalContext, arguments);
 		},
 		getSchema: function (url) {
-			return globalContext.getSchema(url);
+			return globalContext.getSchema.apply(globalContext, arguments);
 		},
+		getSchemaMap: function () {
+			return globalContext.getSchemaMap.apply(globalContext, arguments);
+		},
+		getSchemaUris: function () {
+			return globalContext.getSchemaUris.apply(globalContext, arguments);
+		},
+		getMissingUris: function () {
+			return globalContext.getMissingUris.apply(globalContext, arguments);
+		},
+		dropSchemas: function () {
+			globalContext.dropSchemas.apply(globalContext, arguments);
+		},
+        reset: function () {
+			globalContext.reset();
+			this.error = null;
+			this.missing = [];
+			this.valid = true;
+        },
 		missing: [],
 		error: null,
+		valid: true,
 		normSchema: normSchema,
 		resolveUrl: resolveUrl,
+		getUriResource: getUriResource,
 		errorCodes: ErrorCodes
 	};
+	return api;
 };
 
 global.tv4 = createApi();
