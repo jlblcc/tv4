@@ -123,6 +123,16 @@ assert.notOwnPropertyVal = function (object, property, value, message) {
 	assert.notOwnProperty(object, property, message);
 	assert.notStrictEqual(object[property], value, message);
 };
+assert.propertyValues = function (object, properties, value, message) {
+	assert.isObject(object, message);
+	assert.isObject(properties, message);
+	//copy properties
+	var props = {};
+	for (var name in properties) {
+		props[name] = object[name];
+	}
+	assert.deepEqual(props, properties, message);
+};
 //import when fix is pushed
 assert.notOk = function (value, message) {
 	if (!!value) {
@@ -219,6 +229,39 @@ describe("Core 03", function () {
 			assert.isTrue(tv4.valid, "reset to valid");
 			assert.length(tv4.missing, 0, "reset to 0 missing");
 		});
+	});
+});
+
+describe("Core 04", function () {
+
+	var schema = {
+		"type": "string"
+	};
+
+	it("ValidationError is Error subtype", function () {
+		var res = tv4.validateResult(123, schema);
+		assert.isObject(res);
+		assert.isObject(res.error);
+		assert.isInstanceOf(res.error, Error);
+		assert.isString(res.error.stack);
+	});
+
+	it("ValidationError has own stack trace", function () {
+		function errorA() {
+			var res = tv4.validateResult(123, schema);
+			assert.isFalse(res.valid);
+			assert.isString(res.error.stack);
+			assert.ok(res.error.stack.indexOf('errorA') > -1, 'has own stack trace A');
+		}
+
+		function errorB() {
+			var res = tv4.validateResult(123, schema);
+			assert.isFalse(res.valid);
+			assert.isString(res.error.stack);
+			assert.ok(res.error.stack.indexOf('errorB') > -1, 'has own stack trace B');
+		}
+		errorA();
+		errorB();
 	});
 });
 
@@ -1224,7 +1267,7 @@ describe("$ref 03", function () {
 			dataPath: '/0',
 			schemaPath: '/items/type',
 			subErrors: null };
-		assert.deepEqual(tv4.error, error);
+		assert.propertyValues(tv4.error, error);
 	});
 });
 describe("$ref 04", function () {
@@ -1290,7 +1333,7 @@ describe("$ref 05", function () {
 		var data = [0, false];
 		var valid = tv4.validate(data, schema);
 		assert.isFalse(valid, 'inline addressing invalid 0, false');
-		assert.deepEqual(tv4.error, error, 'errors equal');
+		assert.propertyValues(tv4.error, error, 'errors equal');
 	});
 
 	it("don't trust non sub-paths", function () {
@@ -1761,7 +1804,7 @@ describe("Registering custom validator", function () {
 	});
 });
 
-describe("Registering custom validator", function () {
+describe("Ban unknown properties 01", function () {
 	it("Additional argument to ban additional properties", function () {
 		var schema = {
 			properties: {
@@ -1823,16 +1866,14 @@ describe("Registering custom validator", function () {
 		};
 		
 		var result = tv4.validateMultiple(data, schema, false, true);
-		console.log(result);
 		assert.isTrue(result.valid, "Must be valid");
 
 		var result2 = tv4.validateMultiple(data2, schema, false, true);
-		console.log(result2);
 		assert.isTrue(result2.valid, "Must still validate");
 	});
 });
 
-describe("Registering custom validator", function () {
+describe("Ban unknown properties 02", function () {
 	it("Do not track property definitions from \"not\"", function () {
 		var schema = {
 			"not": {
@@ -1909,6 +1950,164 @@ describe("Registering custom validator", function () {
 	});
 });
 
+describe("Fill dataPath for \"required\" (GitHub Issue #103)", function () {
+	it("Blank for first-level properties", function () {
+		var schema = {
+			required: ['A']
+		};
+		var data = {};
+		
+		var result = tv4.validateMultiple(data, schema, false, true);
+		assert.isFalse(result.valid, "Must not be valid");
+		assert.deepEqual(result.errors[0].dataPath, '');
+	});
+
+	it("Filled for second-level properties", function () {
+		var schema = {
+			properties: {
+				"foo": {
+					required: ["bar"]
+				}
+			}
+		};
+		var data = {"foo": {}};
+		
+		var result = tv4.validateMultiple(data, schema, false, true);
+		assert.isFalse(result.valid, "Must not be valid");
+		assert.deepEqual(result.errors[0].dataPath, '/foo');
+	});
+});
+
+describe("Register custom keyword", function () {
+	it("function called", function () {
+		var schema = {
+			customKeyword: "A"
+		};
+		var data = {};
+		
+		tv4.defineKeyword('customKeyword', function () {
+			return "Custom failure";
+		});
+		
+		var result = tv4.validateMultiple(data, schema, false, true);
+		assert.isFalse(result.valid, "Must not be valid");
+		assert.deepEqual(result.errors[0].message, 'Keyword failed: customKeyword (Custom failure)');
+	});
+
+	it("custom error code", function () {
+		var schema = {
+			customKeyword: "A"
+		};
+		var data = "test test test";
+		
+		tv4.defineKeyword('customKeyword', function (data, value) {
+			return {
+				code: 'CUSTOM_KEYWORD_FOO',
+				message: {data: data, value: value}
+			};
+		});
+		tv4.defineError('CUSTOM_KEYWORD_FOO', 123456789, "{value}: {data}");
+		
+		var result = tv4.validateMultiple(data, schema, false, true);
+		assert.isFalse(result.valid, "Must not be valid");
+		assert.deepEqual(result.errors[0].message, 'A: test test test');
+		assert.deepEqual(result.errors[0].code, 123456789);
+	});
+	
+	it("restrict custom error codes", function () {
+		assert.throws(function () {
+			tv4.defineError('CUSTOM_KEYWORD_BLAH', 9999, "{value}: {data}");
+		});
+	});
+	
+	it("restrict custom error names", function () {
+		assert.throws(function () {
+			tv4.defineError('doesnotmatchpattern', 10002, "{value}: {data}");
+		});
+	});
+	
+	it("can't defined the same code twice", function () {
+		assert.throws(function () {
+			tv4.defineError('CUSTOM_ONE', 10005, "{value}: {data}");
+			tv4.defineError('CUSTOM_TWO', 10005, "{value}: {data}");
+		});
+	});
+	
+	it("function only called when keyword present", function () {
+		var schema = {
+			"type": "object",
+			"properties": {
+				"aStringValue": {
+					"type": "string",
+					"my-custom-keyword": "something"
+				},
+				"aBooleanValue": {
+					"type": "boolean"
+				}
+			}
+		};
+		var data = {
+			"aStringValue": "a string",
+			"aBooleanValue": true
+		};
+		
+		var callCount = 0;
+		tv4.defineKeyword('my-custom-keyword', function () {
+			callCount++;
+		});
+		
+		tv4.validateMultiple(data, schema, false, true);
+		assert.deepEqual(callCount, 1, "custom function must be called exactly once");
+	});
+});
+
+describe("Issue 108", function () {
+
+	it("Normalise schemas even inside $ref", function () {
+	
+		var schema = {
+			"id": "http://example.com/schema" + Math.random(),
+			"$ref": "#whatever",
+			"properties": {
+				"foo": {
+					"id": "#test",
+					"type": "string"
+				}
+			}
+		};
+
+		tv4.addSchema(schema);
+
+		var result = tv4.validateMultiple("test data", schema.id + '#test');		
+		assert.isTrue(result.valid, 'validateMultiple() should return valid');
+		assert.deepEqual(result.missing.length, 0, 'should have no missing schemas');
+
+		var result2 = tv4.validateMultiple({"foo":"bar"}, schema.id + '#test');
+		assert.isFalse(result2.valid, 'validateMultiple() should return invalid');
+		assert.deepEqual(result2.missing.length, 0, 'should have no missing schemas');
+	});
+});
+describe("Issue 109", function () {
+
+	it("Don't break on null values with banUnknownProperties", function () {
+	
+		var schema = {
+			"type": "object",
+			"properties": {
+				"foo": {
+					"type": "object",
+					"additionalProperties": {"type": "string"}
+				}
+			}
+		};
+
+		var data = {foo: null};
+		
+		var result = tv4.validateMultiple(data, schema, true, true);
+		
+		assert.isFalse(result.valid, 'validateMultiple() should return valid');
+	});
+});
 describe("Issue 32", function () {
 
 	it("Example from GitHub issue #32", function () {
@@ -1968,6 +2167,133 @@ describe("Issue 32", function () {
 		assert.length(expectedMultipleErrorResult.errors, 1, 'validateMultiple should have exactly one error');
 		//this.assert(!expectedMultipleErrorResult.valid, 'validateMultiple should fail');
 		//this.assert(expectedMultipleErrorResult.errors.length == 1, 'validateMultiple should have exactly one error');
+	});
+});
+describe("Issue 67", function () {
+
+	it("Example from GitHub issue #67", function () {
+		// Make sure null values don't trip up the normalisation
+		tv4.validate(null, {default: null});
+	});
+});
+describe("Issue 86", function () {
+
+	it("Example from GitHub issue #86", function () {
+		// The "checkRecursive" flag skips some data nodes if it actually needs to check the same data/schema pair twice
+	
+		var schema = {
+			"type": "object",
+			"properties": {
+				"shape": {
+					"oneOf": [
+						{ "$ref": "#/definitions/squareSchema" },
+						{ "$ref": "#/definitions/circleSchema" }
+					]
+				}
+			},
+			"definitions": {
+				"squareSchema": {
+					"type": "object",
+					"properties": {
+						"thetype": {
+							"type": "string",
+							"enum": ["square"]
+						},
+						"colour": {},
+						"shade": {},
+						"boxname": {
+							"type": "string"
+						}
+					},
+					"oneOf": [
+						{ "$ref": "#/definitions/colourSchema" },
+						{ "$ref": "#/definitions/shadeSchema" }
+					],
+					"required": ["thetype", "boxname"],
+					"additionalProperties": false
+				},
+				"circleSchema": {
+					"type": "object",
+					"properties": {
+						"thetype": {
+							"type": "string",
+							"enum": ["circle"]
+						},
+						"colour": {},
+						"shade": {}
+					},
+					"oneOf": [
+						{ "$ref": "#/definitions/colourSchema" },
+						{ "$ref": "#/definitions/shadeSchema" }
+					],
+					"additionalProperties": false
+				},
+				"colourSchema": {
+					"type": "object",
+					"properties": {
+						"colour": {
+							"type": "string"
+						},
+						"shade": {
+							"type": "null"
+						}
+					}
+				},
+				"shadeSchema": {
+					"type": "object",
+					"properties": {
+						"shade": {
+							"type": "string"
+						},
+						"colour": {
+							"type": "null"
+						}
+					}
+				}
+			}
+		};
+
+	
+		var circle = {
+			"shape": {
+				"thetype": "circle",
+				"shade": "red"
+			}
+		};
+		
+		var simpleResult = tv4.validate(circle, schema, true);
+		var multipleResult = tv4.validateMultiple(circle, schema, true);
+		
+		assert.isTrue(simpleResult, 'validate() should return valid');
+		assert.isTrue(multipleResult.valid, 'validateMultiple() should return valid');
+	});
+
+	it("Second example", function () {
+		var schema = {
+			"allOf": [
+				{
+					"oneOf": [
+						{"$ref": "#/definitions/option1"},
+						{"$ref": "#/definitions/option2"},
+					]
+				},
+				{
+					"not": {"$ref": "#/definitions/option2"}
+				}
+			],
+			"definitions": {
+				"option1": {
+					"allOf": [{"type": "string"}]
+				},
+				"option2": {
+					"allOf": [{"type": "number"}]
+				}
+			}
+		};
+		
+		var simpleResult = tv4.validate("test", schema, true);
+		
+		assert.isTrue(simpleResult, "validate() should return valid");
 	});
 });
 //@ sourceMappingURL=all_concat.js.map

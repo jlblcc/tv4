@@ -84,7 +84,7 @@ tv4.validate(data, schema, function (isValid, validationError) { ... });
 
 ## Cyclical JavaScript objects
 
-While they don't occur in proper JSON, JavaScript does support self-referencing objects. Any of the above calls support an optional final argument, checkRecursive. If true, tv4 will handle self-referencing objects properly - this slows down validation slightly, but that's better than a hanging script.
+While they don't occur in proper JSON, JavaScript does support self-referencing objects. Any of the above calls support an optional third argument: `checkRecursive`. If true, tv4 will handle self-referencing objects properly - this slows down validation slightly, but that's better than a hanging script.
 
 Consider this data, notice how both `a` and `b` refer to each other:
 
@@ -98,16 +98,26 @@ tv4.addSchema('aSchema', aSchema);
 tv4.addSchema('bSchema', bSchema);
 ```
 
-If the final checkRecursive argument were missing, this would throw a "too much recursion" error. 
+If the `checkRecursive` argument were missing, this would throw a "too much recursion" error. 
 
-To enable supprot for this pass `true` as additional argument to any of the regular validation methods: 
+To enable support for this, pass `true` as additional argument to any of the regular validation methods: 
 
 ```javascript
 tv4.validate(a, aSchema, true);
-tv4.validate(a, schema, asynchronousFunction, true);
-
 tv4.validateResult(data, aSchema, true); 
 tv4.validateMultiple(data, aSchema, true);
+```
+
+## The `banUnknownProperties` flag
+
+Sometimes, it is desirable to flag all unknown properties as an error.  This is especially useful during development, to catch typos and the like, even when extra custom-defined properties are allowed.
+
+As such, tv4 implements ["ban unknown properties" mode](https://github.com/json-schema/json-schema/wiki/ban-unknown-properties-mode-\(v5-proposal\)), enabled by a fourth-argument flag:
+
+```javascript
+tv4.validate(data, schema, checkRecursive, true);
+tv4.validateResult(data, schema, checkRecursive, true);
+tv4.validateMultiple(data, schema, checkRecursive, true);
 ```
 
 ## API
@@ -228,7 +238,7 @@ tv4.language('fr')
 
 ##### addFormat(format, validationFunction)
 
-Add a custom format validator.
+Add a custom format validator. (There are no built-in format validators.)
 
 * `format` is a string, corresponding to the `"format"` value in schemas.
 * `validationFunction` is a function that either returns:
@@ -251,6 +261,42 @@ tv4.addFormat({
 	'other-format': function () {...}
 });
 ````
+
+##### defineKeyword(keyword, validationFunction)
+
+Add a custom keyword validator.
+
+* `keyword` is a string, corresponding to a schema keyword
+* `validationFunction` is a function that either returns:
+  * `null` (meaning no error)
+  * an error string (explaining the reason for failure)
+  * an error object (containing some of: `code`/`message`/`dataPath`/`schemaPath`)
+
+````
+tv4.defineKeyword('my-custom-keyword', function (data, value, schema) {
+	if (simpleFailure()) {
+		return "Failure";
+	} else if (detailedFailure()) {
+		return {code: tv4.errorCodes.MY_CUSTOM_CODE, message: {param1: 'a', param2: 'b'}};
+	} else {
+		return null;
+	}
+});
+````
+
+`schema` is the schema upon which the keyword is defined.  In the above example, `value === schema['my-custom-keyword']`.
+
+If an object is returned from the custom validator, and its `message` is a string, then that is used as the message result.  If `message` is an object, then that is used to populate the (localisable) error template.
+
+##### defineError(codeName, codeNumber, defaultMessage)
+
+Defines a custom error code.
+
+* `codeName` is a string, all-caps underscore separated, e.g. `"MY_CUSTOM_ERROR"`
+* `codeNumber` is an integer > 10000, which will be stored in `tv4.errorCodes` (e.g. `tv4.errorCodes.MY_CUSTOM_ERROR`)
+* `defaultMessage` is an error message template to use (assuming translations have not been provided for this code)
+
+An example of `defaultMessage` might be: `"Incorrect moon (expected {expected}, got {actual}"`).  This is filled out if a custom keyword returns a object `message` (see above).  Translations will be used, if associated with the correct code name/number.
 
 ## Demos
 
@@ -335,6 +381,14 @@ Alternately use it as a CommonJS module:
 ````js
 var tv4 = require('tv4');
 ````
+
+or as an AMD module (e.g. with requirejs):
+
+```js
+require('tv4', function(tv4){
+  //use tv4 here
+});
+```
 
 #### npm
 
