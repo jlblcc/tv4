@@ -9,16 +9,16 @@ if ( typeof (tv4.addAllAsync) === 'undefined') {
 
         if (!missing.length && !uri) {
             if(callback) {
-                callback();
+                callback(tv4.getSchemaMap());
             } else {
                 return true;
             }
         } else {
             // Make a request for each missing schema
             var missingSchemas = $.map(missing, function(schemaUri) {
-                return $.getJSON(pref + schemaUri).success(function(fetchedSchema) {
+                return $.getJSON(pref + schemaUri).done(function(fetchedSchema) {
                     tv4.addSchema(schemaUri, fetchedSchema);
-                }).error(function() {
+                }).fail(function(jqXHR, textStatus, errorThrown) {
                     // If there's an error, just use an empty schema
                     tv4.addSchema(schemaUri, {});
                 });

@@ -1,12 +1,69 @@
 // Get JSON data
-treeJSON = d3.json("flare.json", function(error, treeData) {
+treeJSON = tv4.addAllAsync('adiwg-json-schemas/schema/schema.json', function(schemas) {
+    //treeData;
+
+    //create schema tree
+    function compileData(schema, parent, name) {
+        var key, obj, prop, node = {},
+            s = schema.$ref ? tv4.getSchema(schema.$ref) : schema,
+            props = s.properties,
+            items = s.items,
+            owns = Object.prototype.hasOwnProperty;
+
+        /*for (key in schema ) {
+            if (owns.call(s, key)) {
+                treeData[key] = s[key];
+            }
+        }*/
+        node.description = s.description;
+        node.name = name || 'schema';
+        if(items) {
+            node.name += '[ ]';
+        }
+
+
+        if(props || items) {
+            node.children = [];
+        }
+
+        for (key in props) {
+            if (owns.call(props, key)) {
+                console.log(key, "=", props[key]);
+                compileData(props[key], node, key);
+            }
+        }
+
+        if(Object.prototype.toString.call(items) === "[object Object]") {
+            compileData(items, node, 'item');
+        } else {
+            /*for (key in items) {
+                if (owns.call(items, key)) {
+                    console.log(key, "=", items[key]);
+                    compileData(items[key], node, key);
+                }
+            }*/
+        }
+
+        if(parent) {
+            parent.children.push(node);
+        } else {
+            treeData = node;
+        }
+
+        /*var i;
+        for (i = 0; i < count; i++) {
+            visit(children[i], visitFn, childrenFn);
+        }*/
+    }
+
+    compileData(tv4.getSchema('adiwg-json-schemas/schema/schema.json'));
 
     // Calculate total nodes, max label length
     var totalNodes = 0;
     var maxLabelLength = 0;
     // variables for drag/drop
-    var selectedNode = null;
-    var draggingNode = null;
+    //var selectedNode = null;
+    //var draggingNode = null;
     // panning variables
     var panSpeed = 200;
     var panBoundary = 20; // Within 20px from edges will pan when dragging.
@@ -426,7 +483,7 @@ treeJSON = d3.json("flare.json", function(error, treeData) {
                 return d.children || d._children ? "end" : "start";
             })
             .text(function(d) {
-                return d.size;
+                return d.name;
             });
 
         // Change the circle fill depending on whether it has children and is collapsed
@@ -519,4 +576,4 @@ treeJSON = d3.json("flare.json", function(error, treeData) {
     // Layout the tree initially and center on the root node.
     update(root);
     centerNode(root);
-});
+}, '../');
