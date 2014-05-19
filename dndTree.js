@@ -8,7 +8,21 @@ treeJSON = tv4.addAllAsync('adiwg-json-schemas/schema/schema.json', function(sch
             s = schema.$ref ? tv4.getSchema(schema.$ref) : schema,
             props = s.properties,
             items = s.items,
-            owns = Object.prototype.hasOwnProperty;
+            owns = Object.prototype.hasOwnProperty,
+            all = {};
+
+
+        if (s.allOf) {
+            all.allOf = s.allOf;
+        }
+
+        if (s.oneOf) {
+            all.oneOf = s.oneOf;
+        }
+
+        if (s.anyOf) {
+            all.anyOf = s.anyOf;
+        }
 
         /*for (key in schema ) {
             if (owns.call(s, key)) {
@@ -16,39 +30,71 @@ treeJSON = tv4.addAllAsync('adiwg-json-schemas/schema/schema.json', function(sch
             }
         }*/
         node.description = s.description;
-        node.name = name || 'schema';
-        if(items) {
+        node.name = s.title || name || 'schema';
+        node.type = s.type;
+
+        if (parent) {
+            if (node.name === 'item') {
+                node.parent = parent;
+            } else if (parent.name === 'item') {
+                parent.parent.children.push(node);
+            } else {
+                parent.children.push(node);
+            }
+        } else {
+            treeData = node;
+        }
+
+        if(node.type === 'array') {
             node.name += '[ ]';
         }
 
 
-        if(props || items) {
+        if(props || items || all) {
             node.children = [];
         }
 
         for (key in props) {
             if (owns.call(props, key)) {
                 console.log(key, "=", props[key]);
-                compileData(props[key], node, key);
+                compileData(props[key],  node, key);
             }
         }
 
-        if(Object.prototype.toString.call(items) === "[object Object]") {
-            compileData(items, node, 'item');
-        } else {
-            /*for (key in items) {
-                if (owns.call(items, key)) {
-                    console.log(key, "=", items[key]);
-                    compileData(items[key], node, key);
+        for (key in all) {
+            if (owns.call(all, key)) {
+                console.log(key, "=", all[key]);
+                if(all[key]) {
+                    var allNode = {
+                        name: key,
+                        children: []
+                    };
+
+
+                    if (node.name === 'item') {
+                        node.parent.children.push(allNode);
+                    } else {
+                        node.children.push(allNode);
+                    }
+
+                    all[key].forEach(function(itm,idx, arr){
+                        compileData(itm, allNode, key);
+                    });
+
                 }
-            }*/
+            }
         }
 
-        if(parent) {
-            parent.children.push(node);
-        } else {
-            treeData = node;
+        if (Object.prototype.toString.call(items) === "[object Object]") {
+            compileData(items, node, 'item');
+        } else if (Object.prototype.toString.call(items) === "[object Array]") {
+
+            items.forEach(function(itm, idx, arr) {
+                compileData(itm, node, idx.toString());
+            });
         }
+
+
 
         /*var i;
         for (i = 0; i < count; i++) {
@@ -56,7 +102,7 @@ treeJSON = tv4.addAllAsync('adiwg-json-schemas/schema/schema.json', function(sch
         }*/
     }
 
-    compileData(tv4.getSchema('adiwg-json-schemas/schema/schema.json'));
+    compileData(tv4.getSchema('adiwg-json-schemas/schema/schema.json'),false,'contact');
 
     // Calculate total nodes, max label length
     var totalNodes = 0;
@@ -463,15 +509,15 @@ treeJSON = tv4.addAllAsync('adiwg-json-schemas/schema/schema.json', function(sch
         // phantom node to give us mouseover in a radius around it
         nodeEnter.append("circle")
             .attr('class', 'ghostCircle')
-            .attr("r", 30)
-            .attr("opacity", 0.2) // change this to zero to hide the target area
+            .attr("r", 5)
+            .attr("opacity", 0.7) // change this to zero to hide the target area
         .style("fill", "red")
             .attr('pointer-events', 'mouseover')
             .on("mouseover", function(node) {
-                overCircle(node);
+                //overCircle(node);
             })
             .on("mouseout", function(node) {
-                outCircle(node);
+                //outCircle(node);
             });
 
         // Update the text to reflect whether node has children or not.
