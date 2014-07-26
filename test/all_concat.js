@@ -1978,6 +1978,56 @@ describe("Fill dataPath for \"required\" (GitHub Issue #103)", function () {
 	});
 });
 
+describe("Valid schemaPath for \"oneOf\" (GitHub Issue #117)", function () {
+    it("valid schemaPath in error (simple types)", function () {
+        var data = {};
+        var schema = {
+            "oneOf": [
+                { "type": "string" },
+                { "type": "bool" }
+            ]
+        };
+        
+        var result = tv4.validateMultiple(data, schema);
+        var suberr = result.errors[0].subErrors;
+        assert.equal(suberr[0].schemaPath, '/oneOf/0/type');
+        assert.equal(suberr[1].schemaPath, '/oneOf/1/type');
+    });
+    
+    it("valid schemaPath in error (required properties)", function () {
+        /* Test case provided on GitHub Issue #117 */
+        var data = {};
+        var schema = {
+            "$schema": "http://json-schema.org/draft-04/schema#",
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "type": "object"
+                        }
+                    },
+                    "required": ["data"]
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "type": "object"
+                        }
+                    },
+                    "required": ["error"]
+                }
+            ]
+        };
+        
+        var result = tv4.validateMultiple(data, schema);
+        var suberr = result.errors[0].subErrors;
+        assert.equal(suberr[0].schemaPath, "/oneOf/0/required/0");
+        assert.equal(suberr[1].schemaPath, "/oneOf/1/required/0");
+    });
+});
+
 describe("Register custom keyword", function () {
 	it("function called", function () {
 		var schema = {
@@ -2058,6 +2108,66 @@ describe("Register custom keyword", function () {
 		
 		tv4.validateMultiple(data, schema, false, true);
 		assert.deepEqual(callCount, 1, "custom function must be called exactly once");
+	});
+});
+
+describe("Load language file", function () {
+	if (!process || !require) {
+		it.skip("commonjs language", function () {
+			// dummy
+		});
+	}
+	else {
+		it("commonjs language: de", function () {
+			var tv4 = require('../lang/de');
+
+			tv4.language('de');
+
+			var schema = {
+				properties: {
+					intKey: {"type": "integer"}
+				}
+			};
+			var res = tv4.validateResult({intKey: 'bad'}, schema);
+			assert.isFalse(res.valid);
+			assert.equal(res.error.message, 'Ungültiger Typ: string (erwartet wurde: integer)');
+		});
+	}
+});
+
+describe("Load language file", function () {
+	it("commonjs language: de", function () {
+		var tv4 = require('../').freshApi();
+		
+		tv4.addSchema('/polymorphic', {
+			type: "object",
+			properties: {
+				"type": {type: "string"}
+			},
+			required: ["type"],
+			links: [{
+				rel: "describedby",
+				href: "/schemas/{type}.json"
+			}]
+		});
+
+		var res = tv4.validateResult({type: 'monkey'}, "/polymorphic");
+		assert.isTrue(res.valid);
+		assert.includes(res.missing, "/schemas/monkey.json");
+		
+		tv4.addSchema('/schemas/tiger.json', {
+			properties: {
+				"stripes": {"type": "integer", "minimum": 1}
+			},
+			required: ["stripes"]
+		});
+		
+		var res2 = tv4.validateResult({type: 'tiger', stripes: -1}, "/polymorphic");
+		assert.isFalse(res2.valid);
+		assert.deepEqual(res2.missing.length, 0, "no schemas should be missing");
+
+		var res3 = tv4.validateResult({type: 'tiger', stripes: 50}, "/polymorphic");
+		assert.isTrue(res3.valid);
 	});
 });
 

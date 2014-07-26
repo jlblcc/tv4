@@ -163,7 +163,7 @@ ValidatorContext.prototype.addSchema = function (url, schema) {
 			return;
 		}
 	}
-	if (url = getDocumentUri(url) + "#") {
+	if (url === getDocumentUri(url) + "#") {
 		// Remove empty fragment
 		url = getDocumentUri(url);
 	}
@@ -282,6 +282,7 @@ ValidatorContext.prototype.validateAll = function (data, schema, dataPathParts, 
 		|| this.validateArray(data, schema, dataPointerPath)
 		|| this.validateObject(data, schema, dataPointerPath)
 		|| this.validateCombinations(data, schema, dataPointerPath)
+		|| this.validateHypermedia(data, schema, dataPointerPath)
 		|| this.validateFormat(data, schema, dataPointerPath)
 		|| this.validateDefinedKeywords(data, schema, dataPointerPath)
 		|| null;

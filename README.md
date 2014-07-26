@@ -1,6 +1,6 @@
 # Tiny Validator (for v4 JSON Schema)
 
-[![Build Status](https://secure.travis-ci.org/geraintluff/tv4.png?branch=master)](http://travis-ci.org/geraintluff/tv4) [![Dependency Status](https://gemnasium.com/geraintluff/tv4.png)](https://gemnasium.com/geraintluff/tv4) [![NPM version](https://badge.fury.io/js/tv4.png)](http://badge.fury.io/js/tv4)
+[![Build Status](https://secure.travis-ci.org/geraintluff/tv4.svg?branch=master)](http://travis-ci.org/geraintluff/tv4) [![Dependency Status](https://gemnasium.com/geraintluff/tv4.svg)](https://gemnasium.com/geraintluff/tv4) [![NPM version](https://badge.fury.io/js/tv4.svg)](http://badge.fury.io/js/tv4)
 
 Use [json-schema](http://json-schema.org/) [draft v4](http://json-schema.org/latest/json-schema-core.html) to validate simple values and complex objects using a rich [validation vocabulary](http://json-schema.org/latest/json-schema-validation.html) ([examples](http://json-schema.org/examples.html)).
 
@@ -20,7 +20,7 @@ The error object will look something like:
     "code": 0,
     "message": "Invalid type: string",
     "dataPath": "/intKey",
-    "schemaKey": "/properties/intKey/type"
+    "schemaPath": "/properties/intKey/type"
 }
 ```
 
@@ -238,7 +238,7 @@ tv4.language('fr')
 
 ##### addFormat(format, validationFunction)
 
-Add a custom format validator. (There are no built-in format validators.)
+Add a custom format validator. (There are no built-in format validators. Several common ones can be found [here](https://github.com/ikr/tv4-formats) though)
 
 * `format` is a string, corresponding to the `"format"` value in schemas.
 * `validationFunction` is a function that either returns:
